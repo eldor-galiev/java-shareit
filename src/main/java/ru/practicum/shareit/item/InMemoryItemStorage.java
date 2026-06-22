@@ -3,7 +3,6 @@ package ru.practicum.shareit.item;
 import org.springframework.stereotype.Repository;
 import ru.practicum.shareit.item.model.Item;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,9 +42,6 @@ public class InMemoryItemStorage implements ItemStorage {
 
     @Override
     public List<Item> search(String text) {
-        if (text == null || text.isBlank()) {
-            return new ArrayList<>();
-        }
         String lower = text.toLowerCase();
         return items.values().stream()
                 .filter(i -> Boolean.TRUE.equals(i.getAvailable()))

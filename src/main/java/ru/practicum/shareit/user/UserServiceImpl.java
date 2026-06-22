@@ -26,25 +26,23 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto update(Long id, UserDto dto) {
-        User existing = userStorage.findById(id)
-                .orElseThrow(() -> new NotFoundException("User not found: " + id));
-        if (dto.getEmail() != null && userStorage.existsByEmailAndNotId(dto.getEmail(), id)) {
-            throw new DuplicateEmailException("Email already in use: " + dto.getEmail());
-        }
-        if (dto.getName() != null) {
+        User existing = findUserById(id);
+        if (dto.getName() != null && !dto.getName().isBlank()) {
             existing.setName(dto.getName());
         }
-        if (dto.getEmail() != null) {
-            existing.setEmail(dto.getEmail());
+        String newEmail = dto.getEmail();
+        if (newEmail != null && !newEmail.isBlank() && newEmail.contains("@")) {
+            if (userStorage.existsByEmailAndNotId(newEmail, id)) {
+                throw new DuplicateEmailException("Email already in use: " + newEmail);
+            }
+            existing.setEmail(newEmail);
         }
         return UserMapper.toUserDto(userStorage.update(existing));
     }
 
     @Override
     public UserDto getById(Long id) {
-        return userStorage.findById(id)
-                .map(UserMapper::toUserDto)
-                .orElseThrow(() -> new NotFoundException("User not found: " + id));
+        return UserMapper.toUserDto(findUserById(id));
     }
 
     @Override
@@ -56,6 +54,12 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void delete(Long id) {
+        findUserById(id);
         userStorage.delete(id);
+    }
+
+    private User findUserById(Long id) {
+        return userStorage.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found: " + id));
     }
 }
