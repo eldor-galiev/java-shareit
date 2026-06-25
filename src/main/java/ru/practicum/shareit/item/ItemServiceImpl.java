@@ -3,6 +3,7 @@ package ru.practicum.shareit.item;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.shareit.booking.Booking;
 import ru.practicum.shareit.booking.BookingMapper;
 import ru.practicum.shareit.booking.BookingRepository;
 import ru.practicum.shareit.booking.BookingStatus;
@@ -17,6 +18,7 @@ import ru.practicum.shareit.user.User;
 import ru.practicum.shareit.user.UserRepository;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,8 +35,7 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional
     public ItemDto create(Long userId, ItemDto dto) {
-        User owner = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
+        User owner = getUser(userId);
         Item item = ItemMapper.toItem(dto, owner);
         return ItemMapper.toItemDto(itemRepository.save(item));
     }
@@ -42,8 +43,7 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional
     public ItemDto update(Long userId, Long itemId, ItemDto dto) {
-        Item existing = itemRepository.findById(itemId)
-                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
+        Item existing = getItem(itemId);
         if (!existing.getOwner().getId().equals(userId)) {
             throw new NotFoundException("Item not found for this user");
         }
@@ -62,8 +62,7 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional(readOnly = true)
     public ItemDto getById(Long userId, Long itemId) {
-        Item item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
+        Item item = getItem(itemId);
 
         List<CommentDto> comments = commentRepository.findAllByItemId(itemId).stream()
                 .map(CommentMapper::toCommentDto)
@@ -96,13 +95,20 @@ public class ItemServiceImpl implements ItemService {
         Map<Long, List<Comment>> rawCommentsByItem = commentRepository.findAllByItemIdIn(itemIds).stream()
                 .collect(Collectors.groupingBy(c -> c.getItem().getId()));
 
+        Map<Long, List<Booking>> bookingsByItem = bookingRepository
+                .findAllByItemInAndStatusOrderByStartAsc(items, BookingStatus.APPROVED).stream()
+                .collect(Collectors.groupingBy(booking -> booking.getItem().getId()));
+
         return items.stream().map(item -> {
-            BookingShortDto lastBooking = bookingRepository
-                    .findFirstByItemAndStatusAndEndLessThanOrderByEndDesc(item, BookingStatus.APPROVED, now)
+            List<Booking> itemBookings = bookingsByItem.getOrDefault(item.getId(), List.of());
+            BookingShortDto lastBooking = itemBookings.stream()
+                    .filter(booking -> booking.getEnd().isBefore(now))
+                    .max(Comparator.comparing(Booking::getEnd))
                     .map(BookingMapper::toBookingShortDto)
                     .orElse(null);
-            BookingShortDto nextBooking = bookingRepository
-                    .findFirstByItemAndStatusAndStartGreaterThanOrderByStartAsc(item, BookingStatus.APPROVED, now)
+            BookingShortDto nextBooking = itemBookings.stream()
+                    .filter(booking -> booking.getStart().isAfter(now))
+                    .min(Comparator.comparing(Booking::getStart))
                     .map(BookingMapper::toBookingShortDto)
                     .orElse(null);
             List<CommentDto> comments = rawCommentsByItem.getOrDefault(item.getId(), List.of()).stream()
@@ -126,10 +132,8 @@ public class ItemServiceImpl implements ItemService {
     @Override
     @Transactional
     public CommentDto addComment(Long userId, Long itemId, CommentDto dto) {
-        User author = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
-        Item item = itemRepository.findById(itemId)
-                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
+        User author = getUser(userId);
+        Item item = getItem(itemId);
 
         boolean hasPastBooking = bookingRepository.existsByBookerIdAndItemIdAndEndLessThan(
                 userId, itemId, LocalDateTime.now());
@@ -137,7 +141,17 @@ public class ItemServiceImpl implements ItemService {
             throw new ValidationException("User has no completed booking for this item");
         }
 
-        Comment comment = new Comment(null, dto.getText(), item, author, LocalDateTime.now());
+        Comment comment = CommentMapper.toComment(dto, item, author);
         return CommentMapper.toCommentDto(commentRepository.save(comment));
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
+    }
+
+    private Item getItem(Long itemId) {
+        return itemRepository.findById(itemId)
+                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
     }
 }

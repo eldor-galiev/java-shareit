@@ -29,10 +29,8 @@ public class BookingServiceImpl implements BookingService {
     public BookingDto create(Long userId, BookingCreateDto dto) {
         validateBookingDates(dto.getStart(), dto.getEnd());
 
-        User booker = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
-        Item item = itemRepository.findById(dto.getItemId())
-                .orElseThrow(() -> new NotFoundException("Item not found: " + dto.getItemId()));
+        User booker = getUser(userId);
+        Item item = getItem(dto.getItemId());
 
         if (!item.getAvailable()) {
             throw new ValidationException("Item is not available for booking");
@@ -41,15 +39,14 @@ public class BookingServiceImpl implements BookingService {
             throw new NotFoundException("Owner cannot book their own item");
         }
 
-        Booking booking = new Booking(null, dto.getStart(), dto.getEnd(), item, booker, BookingStatus.WAITING);
+        Booking booking = BookingMapper.toBooking(dto, item, booker);
         return BookingMapper.toBookingDto(bookingRepository.save(booking));
     }
 
     @Override
     @Transactional
     public BookingDto approve(Long userId, Long bookingId, boolean approved) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+        Booking booking = getBooking(bookingId);
 
         if (!booking.getItem().getOwner().getId().equals(userId)) {
             throw new ValidationException("Only the item owner can approve bookings");
@@ -65,8 +62,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional(readOnly = true)
     public BookingDto getById(Long userId, Long bookingId) {
-        Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
+        Booking booking = getBooking(bookingId);
 
         boolean isBooker = booking.getBooker().getId().equals(userId);
         boolean isOwner = booking.getItem().getOwner().getId().equals(userId);
@@ -116,21 +112,23 @@ public class BookingServiceImpl implements BookingService {
     }
 
     private void validateBookingDates(LocalDateTime start, LocalDateTime end) {
-        LocalDateTime now = LocalDateTime.now();
-        if (start == null || end == null) {
-            throw new ValidationException("Start and end dates must not be null");
-        }
         if (!end.isAfter(start)) {
             throw new ValidationException("End date must be after start date");
         }
-        if (start.isBefore(now)) {
-            throw new ValidationException("Start date must not be in the past");
-        }
-        if (end.isBefore(now)) {
-            throw new ValidationException("End date must not be in the past");
-        }
-        if (start.isEqual(end)) {
-            throw new ValidationException("Start and end dates must not be equal");
-        }
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("User not found: " + userId));
+    }
+
+    private Item getItem(Long itemId) {
+        return itemRepository.findById(itemId)
+                .orElseThrow(() -> new NotFoundException("Item not found: " + itemId));
+    }
+
+    private Booking getBooking(Long bookingId) {
+        return bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new NotFoundException("Booking not found: " + bookingId));
     }
 }
