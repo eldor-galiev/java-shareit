@@ -2,6 +2,7 @@ package ru.practicum.shareit.user;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.shareit.exception.DuplicateEmailException;
 import ru.practicum.shareit.exception.NotFoundException;
 import ru.practicum.shareit.user.dto.UserDto;
@@ -13,53 +14,55 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private final UserStorage userStorage;
+    private final UserRepository userRepository;
 
     @Override
+    @Transactional
     public UserDto create(UserDto dto) {
-        if (userStorage.existsByEmail(dto.getEmail())) {
+        if (userRepository.existsByEmail(dto.getEmail())) {
             throw new DuplicateEmailException("Email already in use: " + dto.getEmail());
         }
         User user = UserMapper.toUser(dto);
-        return UserMapper.toUserDto(userStorage.save(user));
+        return UserMapper.toUserDto(userRepository.save(user));
     }
 
     @Override
+    @Transactional
     public UserDto update(Long id, UserDto dto) {
-        User existing = findUserById(id);
+        User existing = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found: " + id));
+        if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+            if (userRepository.existsByEmailAndIdNot(dto.getEmail(), id)) {
+                throw new DuplicateEmailException("Email already in use: " + dto.getEmail());
+            }
+            existing.setEmail(dto.getEmail());
+        }
         if (dto.getName() != null && !dto.getName().isBlank()) {
             existing.setName(dto.getName());
         }
-        String newEmail = dto.getEmail();
-        if (newEmail != null && !newEmail.isBlank() && newEmail.contains("@")) {
-            if (userStorage.existsByEmailAndNotId(newEmail, id)) {
-                throw new DuplicateEmailException("Email already in use: " + newEmail);
-            }
-            existing.setEmail(newEmail);
-        }
-        return UserMapper.toUserDto(userStorage.update(existing));
+        return UserMapper.toUserDto(userRepository.save(existing));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserDto getById(Long id) {
-        return UserMapper.toUserDto(findUserById(id));
+        return UserMapper.toUserDto(userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User not found: " + id)));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<UserDto> getAll() {
-        return userStorage.findAll().stream()
+        return userRepository.findAll().stream()
                 .map(UserMapper::toUserDto)
                 .collect(Collectors.toList());
     }
 
     @Override
+    @Transactional
     public void delete(Long id) {
-        findUserById(id);
-        userStorage.delete(id);
-    }
-
-    private User findUserById(Long id) {
-        return userStorage.findById(id)
+        userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("User not found: " + id));
+        userRepository.deleteById(id);
     }
 }
