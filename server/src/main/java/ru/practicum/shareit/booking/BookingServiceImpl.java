@@ -27,8 +27,6 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingDto create(Long userId, BookingCreateDto dto) {
-        validateBookingDates(dto.getStart(), dto.getEnd());
-
         User booker = getUser(userId);
         Item item = getItem(dto.getItemId());
 
@@ -109,12 +107,6 @@ public class BookingServiceImpl implements BookingService {
             case REJECTED -> bookingRepository.findAllByItemOwnerIdAndStatusOrderByStartDesc(userId, BookingStatus.REJECTED);
         };
         return bookings.stream().map(BookingMapper::toBookingDto).collect(Collectors.toList());
-    }
-
-    private void validateBookingDates(LocalDateTime start, LocalDateTime end) {
-        if (!end.isAfter(start)) {
-            throw new ValidationException("End date must be after start date");
-        }
     }
 
     private User getUser(Long userId) {

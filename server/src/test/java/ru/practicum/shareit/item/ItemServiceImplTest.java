@@ -102,7 +102,6 @@ class ItemServiceImplTest {
         itemService.create(owner.getId(), itemDto("Drill broken", false));
 
         assertThat(itemService.search("dRiLl")).extracting(ItemDto::getName).containsExactly("Drill");
-        assertThat(itemService.search("")).isEmpty();
     }
 
     @Test

@@ -12,6 +12,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+@StartBeforeEnd
 public class BookItemRequestDto {
 	private long itemId;
 	@NotNull
